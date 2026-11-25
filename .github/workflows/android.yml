@@ -1,0 +1,90 @@
+name: Build APK
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build APK
+        run: |
+          set -e
+          HTML=$(ls *.html | head -1)
+          mkdir -p app/src/main/assets app/src/main/java/com/majed/headshot
+          cp "$HTML" app/src/main/assets/index.html
+          cat > settings.gradle <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositories { google(); mavenCentral() } }
+          rootProject.name = 'HeadshotPro'
+          include ':app'
+          EOF
+          cat > build.gradle <<'EOF'
+          plugins { id 'com.android.application' version '8.2.2' apply false }
+          EOF
+          cat > app/build.gradle <<'EOF'
+          plugins { id 'com.android.application' }
+          android {
+            namespace 'com.majed.headshot'
+            compileSdk 34
+            defaultConfig {
+              applicationId 'com.majed.headshot'
+              minSdk 24
+              targetSdk 34
+              versionCode 1
+              versionName '1.0'
+            }
+            compileOptions {
+              sourceCompatibility JavaVersion.VERSION_17
+              targetCompatibility JavaVersion.VERSION_17
+            }
+          }
+          EOF
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <application android:label="Headshot PRO"
+              android:icon="@android:drawable/sym_def_app_icon"
+              android:theme="@android:style/Theme.Material.NoActionBar"
+              android:allowBackup="false">
+              <activity android:name=".MainActivity" android:exported="true"
+                android:configChanges="orientation|screenSize|keyboardHidden">
+                <intent-filter>
+                  <action android:name="android.intent.action.MAIN"/>
+                  <category android:name="android.intent.category.LAUNCHER"/>
+                </intent-filter>
+              </activity>
+            </application>
+          </manifest>
+          EOF
+          cat > app/src/main/java/com/majed/headshot/MainActivity.java <<'EOF'
+          package com.majed.headshot;
+          import android.app.Activity;
+          import android.graphics.Color;
+          import android.os.Bundle;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          public class MainActivity extends Activity {
+            @Override protected void onCreate(Bundle b) {
+              super.onCreate(b);
+              getWindow().setStatusBarColor(Color.parseColor("#0A0A0C"));
+              getWindow().setNavigationBarColor(Color.parseColor("#0A0A0C"));
+              WebView w = new WebView(this);
+              w.setBackgroundColor(Color.parseColor("#0A0A0C"));
+              WebSettings s = w.getSettings();
+              s.setJavaScriptEnabled(true);
+              s.setDomStorageEnabled(true);
+              setContentView(w);
+              w.loadUrl("file:///android_asset/index.html");
+            }
+          }
+          EOF
+          gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HeadshotPRO-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
